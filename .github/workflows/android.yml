@@ -3,21 +3,57 @@ on:
   workflow_dispatch:
   push:
     branches: [main, master]
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Godot 4.4 and Android export templates
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK components
         run: |
-          wget -q https://github.com/godotengine/godot/releases/download/4.4-stable/Godot_v4.4-stable_linux.x86_64.zip
-          unzip -q Godot_v4.4-stable_linux.x86_64.zip
-          sudo mv Godot_v4.4-stable_linux.x86_64 /usr/local/bin/godot
-          chmod +x /usr/local/bin/godot
-          wget -q https://github.com/godotengine/godot/releases/download/4.4-stable/Godot_v4.4-stable_export_templates.tpz
-          mkdir -p "$HOME/.local/share/godot/export_templates/4.4.stable"
-          unzip -q Godot_v4.4-stable_export_templates.tpz -d /tmp/godot_templates
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Install Godot 4.4 and export templates
+        run: |
+          curl -fL --retry 3 -o /tmp/godot.zip https://github.com/godotengine/godot/releases/download/4.4-stable/Godot_v4.4-stable_linux.x86_64.zip
+          unzip -q /tmp/godot.zip -d /tmp
+          sudo install -m 755 /tmp/Godot_v4.4-stable_linux.x86_64 /usr/local/bin/godot
+          curl -fL --retry 3 -o /tmp/templates.tpz https://github.com/godotengine/godot/releases/download/4.4-stable/Godot_v4.4-stable_export_templates.tpz
+          mkdir -p "$HOME/.local/share/godot/export_templates/4.4.stable" /tmp/godot_templates
+          unzip -q /tmp/templates.tpz -d /tmp/godot_templates
           cp /tmp/godot_templates/templates/* "$HOME/.local/share/godot/export_templates/4.4.stable/"
+      - name: Configure Android export tools and debug signing
+        run: |
+          mkdir -p "$HOME/.android" "$HOME/.config/godot"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Android Debug,O=Android,C=US'
+          fi
+          godot --headless --editor --path . --quit || true
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          p=Path.home()/'.config/godot/editor_settings-4.tres'
+          if not p.exists():
+              raise SystemExit('Godot editor settings not found: '+str(p))
+          s=p.read_text()
+          settings={
+              'export/android/android_sdk_path':os.environ['ANDROID_HOME'],
+              'export/android/java_sdk_path':os.environ['JAVA_HOME'],
+              'export/android/debug_keystore':str(Path.home()/'.android/debug.keystore'),
+              'export/android/debug_keystore_user':'androiddebugkey',
+              'export/android/debug_keystore_pass':'android',
+          }
+          import re
+          for k,v in settings.items():
+              line=f'{k} = "{v}"'
+              pattern=r'(?m)^'+re.escape(k)+r'\s*=.*$'
+              s=re.sub(pattern,lambda m:line,s) if re.search(pattern,s) else s.rstrip()+'\n'+line+'\n'
+          p.write_text(s)
+          PY
       - name: Validate project
         run: godot --headless --path . --editor --quit
       - name: Export Android debug APK
