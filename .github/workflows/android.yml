@@ -1,0 +1,31 @@
+name: Android APK (debug)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.4 and Android export templates
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.4-stable/Godot_v4.4-stable_linux.x86_64.zip
+          unzip -q Godot_v4.4-stable_linux.x86_64.zip
+          sudo mv Godot_v4.4-stable_linux.x86_64 /usr/local/bin/godot
+          chmod +x /usr/local/bin/godot
+          wget -q https://github.com/godotengine/godot/releases/download/4.4-stable/Godot_v4.4-stable_export_templates.tpz
+          mkdir -p "$HOME/.local/share/godot/export_templates/4.4.stable"
+          unzip -q Godot_v4.4-stable_export_templates.tpz -d /tmp/godot_templates
+          cp /tmp/godot_templates/templates/* "$HOME/.local/share/godot/export_templates/4.4.stable/"
+      - name: Validate project
+        run: godot --headless --path . --editor --quit
+      - name: Export Android debug APK
+        run: |
+          mkdir -p build
+          godot --headless --path . --export-debug Android build/AntColony3D.apk
+          test -s build/AntColony3D.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AntColony3D-debug-apk
+          path: build/AntColony3D.apk
