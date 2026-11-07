@@ -32,13 +32,14 @@ jobs:
           if [ ! -f "$HOME/.android/debug.keystore" ]; then
             keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Android Debug,O=Android,C=US'
           fi
-          godot --headless --editor --path . --quit || true
+          godot --headless --editor --path . --quit
           python3 - <<'PY'
           from pathlib import Path
           import os
-          p=Path.home()/'.config/godot/editor_settings-4.tres'
-          if not p.exists():
-              raise SystemExit('Godot editor settings not found: '+str(p))
+          candidates=sorted((Path.home()/'.config/godot').glob('editor_settings-*.tres'))
+          if not candidates:
+              raise SystemExit('Godot editor settings not found in ~/.config/godot')
+          p=candidates[-1]
           s=p.read_text()
           settings={
               'export/android/android_sdk_path':os.environ['ANDROID_HOME'],
