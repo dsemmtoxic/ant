@@ -55,12 +55,21 @@ jobs:
               s=re.sub(pattern,lambda m:line,s) if re.search(pattern,s) else s.rstrip()+'\n'+line+'\n'
           p.write_text(s)
           PY
+      - name: Validate Android tooling
+        run: |
+          test -f "$HOME/.local/share/godot/export_templates/4.4.stable/android_debug.apk"
+          test -f "$HOME/.android/debug.keystore"
+          test -d "$ANDROID_HOME/platforms/android-35"
+          test -x "$JAVA_HOME/bin/java"
+          echo "Android SDK: $ANDROID_HOME"
+          echo "Java SDK: $JAVA_HOME"
+          ls -lh "$HOME/.local/share/godot/export_templates/4.4.stable/" | head
       - name: Validate project
-        run: godot --headless --path . --editor --quit
+        run: godot --headless --verbose --path . --editor --quit
       - name: Export Android debug APK
         run: |
           mkdir -p build
-          godot --headless --path . --export-debug Android build/AntColony3D.apk
+          godot --headless --verbose --editor --path . --export-debug "Android" build/AntColony3D.apk
           test -s build/AntColony3D.apk
       - uses: actions/upload-artifact@v4
         with:
