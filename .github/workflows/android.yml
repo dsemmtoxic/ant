@@ -4,6 +4,13 @@ on:
   push:
     branches: [main, master]
 
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -65,13 +72,35 @@ jobs:
           echo "Java SDK: $JAVA_HOME"
           ls -lh "$HOME/.local/share/godot/export_templates/4.4.stable/" | head
       - name: Validate project
-        run: godot --headless --verbose --path . --editor --quit
+        run: |
+          mkdir -p build
+          python3 - <<'PY'
+          import configparser
+          from pathlib import Path
+
+          project = configparser.ConfigParser(interpolation=None)
+          project.read_string('[godot]\n' + Path('project.godot').read_text(encoding='utf-8'))
+          if not project.getboolean('rendering', 'textures/vram_compression/import_etc2_astc', fallback=False):
+              raise SystemExit('::error::Android requires textures/vram_compression/import_etc2_astc=true in [rendering] in project.godot.')
+          print('Android ETC2/ASTC texture import: enabled')
+          PY
+          godot --headless --verbose --path . --editor --quit 2>&1 | tee build/import.log
+          godot --headless --path . --script res://scripts/game.gd --check-only 2>&1 | tee build/scripts.log
       - name: Export Android debug APK
         run: |
           mkdir -p build
-          godot --headless --verbose --editor --path . --export-debug "Android" build/AntColony3D.apk
+          godot --headless --verbose --path . --export-debug "Android" build/AntColony3D.apk 2>&1 | tee build/android-export.log
           test -s build/AntColony3D.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose build/AntColony3D.apk
       - uses: actions/upload-artifact@v4
         with:
           name: AntColony3D-debug-apk
           path: build/AntColony3D.apk
+          if-no-files-found: error
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AntColony3D-build-logs
+          path: build/*.log
+          if-no-files-found: ignore
