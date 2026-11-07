@@ -196,8 +196,8 @@ func build_ui() -> void:
 	for i in range(3):
 		var h := HBoxContainer.new()
 		panel_v.add_child(h)
-		var name := ["Folhas", "Fungos", "Rainha"][i]
-		var label := make_label(h, name + ": 0", 17)
+		var task_name: String = ["Folhas", "Fungos", "Rainha"][i]
+		var label := make_label(h, task_name + ": 0", 17)
 		label.custom_minimum_size.x = 115
 		task_labels.append(label)
 		var minus := Button.new()
